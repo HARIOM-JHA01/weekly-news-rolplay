@@ -40,18 +40,20 @@ def generate_blog_post(api_key: str, news_items: list[NewsItem]) -> BlogPost:
     )
 
     prompt = (
-        f"Write a professional weekly AI news roundup blog post based on these 5 stories:\n\n"
+        f"Escribe un artículo de blog profesional de resumen semanal de noticias de IA basado en estas 5 historias:\n\n"
         f"{news_text}\n\n"
-        "Return a JSON object with exactly these keys:\n"
+        "El artículo debe estar escrito completamente en español mexicano (México), usando expresiones, "
+        "vocabulario y tono propios del español mexicano.\n\n"
+        "Devuelve un objeto JSON con exactamente estas claves:\n"
         '{"title": "...", "summary": "...", "content": "...", "tags": [...]}\n\n'
-        "Requirements:\n"
-        "- title: engaging title for the weekly roundup (max 80 chars)\n"
-        "- summary: 1-2 sentence overview of the week (50-300 chars)\n"
-        "- content: well-structured HTML using <h2>, <p>, <ul>, <li>, <strong> tags. "
-        "  Include an intro paragraph, one <h2> section per news story with 2-3 paragraphs each, "
-        "  and a concluding paragraph. Do not use <html>, <head>, or <body> tags.\n"
-        "- tags: 4-6 relevant tags as strings (e.g. ['AI', 'Machine Learning', 'OpenAI'])\n"
-        "Return ONLY the JSON object, no code blocks, no extra text."
+        "Requisitos:\n"
+        "- title: título atractivo para el resumen semanal (máx. 80 caracteres), en español mexicano\n"
+        "- summary: resumen de 1-2 oraciones de la semana (50-300 caracteres), en español mexicano\n"
+        "- content: HTML bien estructurado usando etiquetas <h2>, <p>, <ul>, <li>, <strong>. "
+        "  Incluye un párrafo introductorio, una sección <h2> por cada noticia con 2-3 párrafos cada una, "
+        "  y un párrafo de conclusión. No uses etiquetas <html>, <head> ni <body>. Todo en español mexicano.\n"
+        "- tags: 4-6 etiquetas relevantes como cadenas de texto (ej. ['IA', 'Aprendizaje Automático', 'OpenAI'])\n"
+        "Devuelve ÚNICAMENTE el objeto JSON, sin bloques de código, sin texto adicional."
     )
 
     response = with_retry(_call_blog_gemini, client, prompt, label="generate_blog_post")
