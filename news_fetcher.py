@@ -1,0 +1,58 @@
+import json
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+from google import genai
+from google.genai import types
+
+from retry import with_retry
+
+
+@dataclass
+class NewsItem:
+    headline: str  # ≤10 words, used in WhatsApp template
+    summary: str   # 2-3 sentences, used in blog post
+
+
+def _call_gemini(client, prompt: str):
+    return client.models.generate_content(
+        model="gemini-3.1-flash-lite-preview",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+            temperature=0.3,
+        ),
+    )
+
+
+def fetch_ai_news(api_key: str) -> list[NewsItem]:
+    client = genai.Client(api_key=api_key)
+
+    today = datetime.now()
+    week_ago = today - timedelta(days=7)
+    date_range = f"{week_ago.strftime('%B %d, %Y')} to {today.strftime('%B %d, %Y')}"
+
+    prompt = (
+        f"Today is {today.strftime('%B %d, %Y')}. "
+        f"Search the web for the top 5 most important AI news stories published between {date_range}. "
+        "Focus on: major model releases, research breakthroughs, company announcements, "
+        "funding rounds, policy/regulation, and industry shifts. "
+        "Only include stories that actually happened in this date range — do not use older news. "
+        "Return exactly 5 items as a JSON array with this structure:\n"
+        '[{"headline": "max 10 word headline", "summary": "2-3 sentence factual summary with dates and numbers"}]\n'
+        "Headlines must be concise, specific, and newsworthy (max 10 words). "
+        "Return ONLY the JSON array, no code blocks, no extra text."
+    )
+
+    response = with_retry(_call_gemini, client, prompt, label="fetch_ai_news")
+
+    raw = response.text.strip()
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        raw = "\n".join(line for line in lines if not line.startswith("```")).strip()
+
+    data = json.loads(raw)
+    if not isinstance(data, list) or len(data) != 5:
+        raise ValueError(f"Expected list of 5 news items, got: {raw}")
+
+    return [NewsItem(headline=item["headline"], summary=item["summary"]) for item in data]
