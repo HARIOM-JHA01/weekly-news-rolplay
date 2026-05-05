@@ -22,16 +22,17 @@ GEMINI_IMAGE_TIMEOUT = 180  # image generation gets more time
 
 def _call_blog_gemini(client, prompt: str):
     return client.models.generate_content(
-        model="gemini-3.1-flash-lite-preview",
+        model="gemini-2.5-flash-preview-05-20",
         contents=prompt,
         config=types.GenerateContentConfig(temperature=0.7),
     )
 
 
 def _call_image_gemini(client, prompt: str):
-    return client.models.generate_content(
-        model="gemini-3.1-flash-image-preview",
-        contents=[prompt],
+    return client.models.generate_images(
+        model="imagen-3.0-generate-002",
+        prompt=prompt,
+        config=types.GenerateImagesConfig(number_of_images=1),
     )
 
 
@@ -106,10 +107,10 @@ def generate_cover_image(api_key: str, title: str) -> bytes:
         label="generate_cover_image",
         per_attempt_timeout=GEMINI_IMAGE_TIMEOUT + 10,
     )
-    log_line("INFO", f"← Gemini: generate_cover_image response received ({len(response.parts)} parts)")
+    images = response.generated_images if response.generated_images else []
+    log_line("INFO", f"← Gemini: generate_cover_image response received ({len(images)} images)")
 
-    for part in response.parts:
-        if part.inline_data is not None:
-            return part.inline_data.data
+    if images and images[0].image and images[0].image.image_bytes:
+        return images[0].image.image_bytes
 
-    raise RuntimeError("No image returned by Gemini image model")
+    raise RuntimeError("No image returned by Imagen model")
