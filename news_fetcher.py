@@ -14,12 +14,16 @@ class NewsItem:
     summary: str   # 2-3 sentences, used in blog post
 
 
-GEMINI_TIMEOUT = 120  # seconds per attempt
+GEMINI_TIMEOUT = 120_000  # milliseconds (HttpOptions.timeout is in ms)
 
 
-def _call_gemini(client, prompt: str):
+PRIMARY_MODEL = "gemini-2.5-flash"
+FALLBACK_MODEL = "gemini-2.5-flash-lite"
+
+
+def _call_gemini(client, prompt: str, model: str = PRIMARY_MODEL):
     return client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
             tools=[types.Tool(google_search=types.GoogleSearch())],
@@ -52,11 +56,19 @@ def fetch_ai_news(api_key: str) -> list[NewsItem]:
 
     from retry import log_line
     log_line("INFO", "→ Gemini: fetch_ai_news request sent (google_search enabled)...")
-    response = with_retry(
-        _call_gemini, client, prompt,
-        label="fetch_ai_news",
-        per_attempt_timeout=GEMINI_TIMEOUT + 10,
-    )
+    try:
+        response = with_retry(
+            _call_gemini, client, prompt, PRIMARY_MODEL,
+            label="fetch_ai_news",
+            per_attempt_timeout=GEMINI_TIMEOUT // 1000 + 10,
+        )
+    except Exception:
+        log_line("WARN", f"Primary model {PRIMARY_MODEL} failed — retrying with fallback {FALLBACK_MODEL}...")
+        response = with_retry(
+            _call_gemini, client, prompt, FALLBACK_MODEL,
+            label="fetch_ai_news[fallback]",
+            per_attempt_timeout=GEMINI_TIMEOUT // 1000 + 10,
+        )
     log_line("INFO", f"← Gemini: fetch_ai_news response received ({len(response.text)} chars)")
 
     raw = response.text.strip()

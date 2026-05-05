@@ -16,8 +16,8 @@ class BlogPost:
     tags: list[str] = field(default_factory=list)
 
 
-GEMINI_TEXT_TIMEOUT = 120   # seconds per attempt
-GEMINI_IMAGE_TIMEOUT = 180  # image generation gets more time
+GEMINI_TEXT_TIMEOUT = 120  # seconds per attempt
+GEMINI_IMAGE_TIMEOUT = 300  # image generation gets more time
 
 
 def _call_blog_gemini(client, prompt: str):
@@ -30,16 +30,18 @@ def _call_blog_gemini(client, prompt: str):
 
 def _call_image_gemini(client, prompt: str):
     return client.models.generate_images(
-        model="imagen-3.0-generate-002",
+        model="imagen-4.0-generate-001",
         prompt=prompt,
-        config=types.GenerateImagesConfig(number_of_images=1),
+        config=types.GenerateImagesConfig(
+            number_of_images=1,
+        ),
     )
 
 
 def generate_blog_post(api_key: str, news_items: list[NewsItem]) -> BlogPost:
     client = genai.Client(
         api_key=api_key,
-        http_options=types.HttpOptions(timeout=GEMINI_TEXT_TIMEOUT),
+        http_options=types.HttpOptions(timeout=GEMINI_TEXT_TIMEOUT * 1000),
     )
 
     news_text = "\n".join(
@@ -65,13 +67,19 @@ def generate_blog_post(api_key: str, news_items: list[NewsItem]) -> BlogPost:
     )
 
     from retry import log_line
+
     log_line("INFO", "→ Gemini: generate_blog_post request sent...")
     response = with_retry(
-        _call_blog_gemini, client, prompt,
+        _call_blog_gemini,
+        client,
+        prompt,
         label="generate_blog_post",
         per_attempt_timeout=GEMINI_TEXT_TIMEOUT + 10,
     )
-    log_line("INFO", f"← Gemini: generate_blog_post response received ({len(response.text)} chars)")
+    log_line(
+        "INFO",
+        f"← Gemini: generate_blog_post response received ({len(response.text)} chars)",
+    )
 
     raw = response.text.strip()
     if raw.startswith("```"):
@@ -90,7 +98,7 @@ def generate_blog_post(api_key: str, news_items: list[NewsItem]) -> BlogPost:
 def generate_cover_image(api_key: str, title: str) -> bytes:
     client = genai.Client(
         api_key=api_key,
-        http_options=types.HttpOptions(timeout=GEMINI_IMAGE_TIMEOUT),
+        http_options=types.HttpOptions(timeout=GEMINI_IMAGE_TIMEOUT * 1000),
     )
 
     prompt = (
@@ -101,16 +109,23 @@ def generate_cover_image(api_key: str, title: str) -> bytes:
     )
 
     from retry import log_line
+
     log_line("INFO", "→ Gemini: generate_cover_image request sent (Imagen)...")
     response = with_retry(
-        _call_image_gemini, client, prompt,
+        _call_image_gemini,
+        client,
+        prompt,
         label="generate_cover_image",
         per_attempt_timeout=GEMINI_IMAGE_TIMEOUT + 10,
     )
-    images = response.generated_images if response.generated_images else []
-    log_line("INFO", f"← Gemini: generate_cover_image response received ({len(images)} images)")
+    generated = response.generated_images or []
+    log_line(
+        "INFO",
+        f"← Gemini: generate_cover_image response received ({len(generated)} images)",
+    )
 
-    if images and images[0].image and images[0].image.image_bytes:
-        return images[0].image.image_bytes
+    for gen_img in generated:
+        if gen_img.image and gen_img.image.image_bytes:
+            return gen_img.image.image_bytes
 
-    raise RuntimeError("No image returned by Imagen model")
+    raise RuntimeError("No image returned by Gemini image generation model")
