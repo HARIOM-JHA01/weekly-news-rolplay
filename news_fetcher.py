@@ -14,6 +14,9 @@ class NewsItem:
     summary: str   # 2-3 sentences, used in blog post
 
 
+GEMINI_TIMEOUT = 120  # seconds per attempt
+
+
 def _call_gemini(client, prompt: str):
     return client.models.generate_content(
         model="gemini-3.1-flash-lite-preview",
@@ -26,7 +29,10 @@ def _call_gemini(client, prompt: str):
 
 
 def fetch_ai_news(api_key: str) -> list[NewsItem]:
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT),
+    )
 
     today = datetime.now()
     week_ago = today - timedelta(days=7)
@@ -44,7 +50,14 @@ def fetch_ai_news(api_key: str) -> list[NewsItem]:
         "Return ONLY the JSON array, no code blocks, no extra text."
     )
 
-    response = with_retry(_call_gemini, client, prompt, label="fetch_ai_news")
+    from retry import log_line
+    log_line("INFO", "→ Gemini: fetch_ai_news request sent (google_search enabled)...")
+    response = with_retry(
+        _call_gemini, client, prompt,
+        label="fetch_ai_news",
+        per_attempt_timeout=GEMINI_TIMEOUT + 10,
+    )
+    log_line("INFO", f"← Gemini: fetch_ai_news response received ({len(response.text)} chars)")
 
     raw = response.text.strip()
     if raw.startswith("```"):

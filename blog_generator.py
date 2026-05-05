@@ -16,6 +16,10 @@ class BlogPost:
     tags: list[str] = field(default_factory=list)
 
 
+GEMINI_TEXT_TIMEOUT = 120   # seconds per attempt
+GEMINI_IMAGE_TIMEOUT = 180  # image generation gets more time
+
+
 def _call_blog_gemini(client, prompt: str):
     return client.models.generate_content(
         model="gemini-3.1-flash-lite-preview",
@@ -32,7 +36,10 @@ def _call_image_gemini(client, prompt: str):
 
 
 def generate_blog_post(api_key: str, news_items: list[NewsItem]) -> BlogPost:
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=GEMINI_TEXT_TIMEOUT),
+    )
 
     news_text = "\n".join(
         f"{i + 1}. {item.headline}\n   {item.summary}"
@@ -56,7 +63,14 @@ def generate_blog_post(api_key: str, news_items: list[NewsItem]) -> BlogPost:
         "Devuelve ÚNICAMENTE el objeto JSON, sin bloques de código, sin texto adicional."
     )
 
-    response = with_retry(_call_blog_gemini, client, prompt, label="generate_blog_post")
+    from retry import log_line
+    log_line("INFO", "→ Gemini: generate_blog_post request sent...")
+    response = with_retry(
+        _call_blog_gemini, client, prompt,
+        label="generate_blog_post",
+        per_attempt_timeout=GEMINI_TEXT_TIMEOUT + 10,
+    )
+    log_line("INFO", f"← Gemini: generate_blog_post response received ({len(response.text)} chars)")
 
     raw = response.text.strip()
     if raw.startswith("```"):
@@ -73,7 +87,10 @@ def generate_blog_post(api_key: str, news_items: list[NewsItem]) -> BlogPost:
 
 
 def generate_cover_image(api_key: str, title: str) -> bytes:
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=GEMINI_IMAGE_TIMEOUT),
+    )
 
     prompt = (
         f"Create a professional blog cover image for a weekly AI news roundup titled '{title}'. "
@@ -82,7 +99,14 @@ def generate_cover_image(api_key: str, title: str) -> bytes:
         "No text. High quality, suitable for a tech blog header."
     )
 
-    response = with_retry(_call_image_gemini, client, prompt, label="generate_cover_image")
+    from retry import log_line
+    log_line("INFO", "→ Gemini: generate_cover_image request sent (Imagen)...")
+    response = with_retry(
+        _call_image_gemini, client, prompt,
+        label="generate_cover_image",
+        per_attempt_timeout=GEMINI_IMAGE_TIMEOUT + 10,
+    )
+    log_line("INFO", f"← Gemini: generate_cover_image response received ({len(response.parts)} parts)")
 
     for part in response.parts:
         if part.inline_data is not None:

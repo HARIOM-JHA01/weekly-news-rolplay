@@ -4,6 +4,7 @@ import csv
 import json
 import os
 import re
+import signal
 import sys
 import time
 import urllib.parse
@@ -334,7 +335,18 @@ def run(cfg: Config) -> int:
     return 0 if failed == 0 else 2
 
 
+GLOBAL_TIMEOUT_SECONDS = 30 * 60  # 30-minute hard ceiling for the entire script
+
+
+def _global_timeout_handler(signum, frame):
+    log_line("ERROR", f"GLOBAL TIMEOUT: script exceeded {GLOBAL_TIMEOUT_SECONDS}s — forcing exit")
+    sys.exit(3)
+
+
 def main() -> None:
+    signal.signal(signal.SIGALRM, _global_timeout_handler)
+    signal.alarm(GLOBAL_TIMEOUT_SECONDS)
+
     args = parse_args()
     load_dotenv_file(".env")
     try:
