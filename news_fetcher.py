@@ -19,7 +19,7 @@ GEMINI_TIMEOUT = 120  # seconds per attempt
 
 def _call_gemini(client, prompt: str):
     return client.models.generate_content(
-        model="gemini-2.5-flash-preview-05-20",
+        model="gemini-2.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             tools=[types.Tool(google_search=types.GoogleSearch())],

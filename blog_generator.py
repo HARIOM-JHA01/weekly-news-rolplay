@@ -22,7 +22,7 @@ GEMINI_IMAGE_TIMEOUT = 180  # image generation gets more time
 
 def _call_blog_gemini(client, prompt: str):
     return client.models.generate_content(
-        model="gemini-2.5-flash-preview-05-20",
+        model="gemini-2.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(temperature=0.7),
     )
