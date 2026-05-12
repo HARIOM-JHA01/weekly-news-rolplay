@@ -175,6 +175,51 @@ def summarize_twilio_success(raw: str) -> str:
     return f"sid={sid} status={status} to={to_value}"
 
 
+def fetch_message_status(cfg: Config, sid: str) -> str:
+    endpoint = (
+        f"https://api.twilio.com/2010-04-01/Accounts/"
+        f"{cfg.twilio_account_sid}/Messages/{sid}.json"
+    )
+    basic_auth = f"{cfg.twilio_account_sid}:{cfg.twilio_auth_token}".encode("utf-8")
+    auth_header = "Basic " + base64.b64encode(basic_auth).decode("utf-8")
+    request = urllib.request.Request(
+        endpoint,
+        headers={"Authorization": auth_header},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        return data.get("status", "unknown")
+    except Exception as exc:
+        return f"error({exc})"
+
+
+def poll_delivery_statuses(cfg: Config, sids: list[tuple[str, str]], wait_seconds: int = 15) -> None:
+    """Poll Twilio for final delivery status of each sent message SID.
+
+    sids: list of (name, sid) pairs
+    """
+    if not sids:
+        return
+    log_line("INFO", f"Waiting {wait_seconds}s before polling delivery statuses...")
+    time.sleep(wait_seconds)
+
+    delivered = 0
+    failed = 0
+    log_line("INFO", "Polling delivery statuses:")
+    for name, sid in sids:
+        status = fetch_message_status(cfg, sid)
+        level = "INFO" if status in ("delivered", "sent", "read") else "WARN"
+        log_line(level, f"  {name}: sid={sid} status={status}")
+        if status in ("delivered", "sent", "read"):
+            delivered += 1
+        else:
+            failed += 1
+
+    log_line("INFO", f"Delivery poll complete: delivered/sent={delivered} not_delivered={failed}")
+
+
 def summarize_twilio_error(raw: str) -> str:
     data = parse_json_safely(raw)
     if "code" in data or "message" in data:
@@ -273,6 +318,7 @@ def run(cfg: Config) -> int:
     failed = 0
     skipped = 0
     dry_run_count = 0
+    sent_sids: list[tuple[str, str]] = []  # (name, sid)
 
     log_line(
         "INFO",
@@ -309,10 +355,11 @@ def run(cfg: Config) -> int:
         ok, result = with_retry(send_template, cfg, to_whatsapp=to_whatsapp, variables=variables, label=f"send_whatsapp/{raw_name}")
         if ok:
             sent += 1
-            log_line(
-                "INFO",
-                f"[{index}/{len(users)}] SENT name='{raw_name}' {summarize_twilio_success(result)}",
-            )
+            summary = summarize_twilio_success(result)
+            log_line("INFO", f"[{index}/{len(users)}] SENT name='{raw_name}' {summary}")
+            sid = parse_json_safely(result).get("sid")
+            if sid:
+                sent_sids.append((raw_name, sid))
         else:
             failed += 1
             log_line(
@@ -323,6 +370,9 @@ def run(cfg: Config) -> int:
 
         if cfg.delay_seconds > 0:
             time.sleep(cfg.delay_seconds)
+
+    if not cfg.dry_run:
+        poll_delivery_statuses(cfg, sent_sids)
 
     print_summary(
         total=len(users),
