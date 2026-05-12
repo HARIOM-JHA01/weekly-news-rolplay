@@ -50,6 +50,7 @@ def fetch_ai_news(api_key: str) -> list[NewsItem]:
         "Only include stories that actually happened in this date range — do not use older news. "
         "Return exactly 5 items as a JSON array with this structure:\n"
         '[{"headline": "max 10 word headline", "summary": "2-3 sentence factual summary with dates and numbers"}]\n'
+        "Headlines and summaries must be written in Spanish. "
         "Headlines must be concise, specific, and newsworthy (max 10 words). "
         "Return ONLY the JSON array, no code blocks, no extra text."
     )
